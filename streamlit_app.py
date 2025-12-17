@@ -21,6 +21,8 @@ import streamlit as st
 
 warnings.filterwarnings("ignore")
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 # ----------------------------
 # Config
 # ----------------------------
@@ -93,9 +95,19 @@ def _read_csv_any(source):
     """Accept a path, buffer, or UploadedFile and return a DataFrame."""
     if source is None:
         return pd.DataFrame()
+    if isinstance(source, (str, os.PathLike)):
+        source = _resolve_path(source)
     if hasattr(source, "read"):
         source.seek(0)
     return pd.read_csv(source)
+
+
+def _resolve_path(path_like: str | os.PathLike) -> str:
+    """Resolve relative paths against the repo/app directory."""
+    path_str = os.fspath(path_like)
+    if os.path.isabs(path_str):
+        return path_str
+    return os.path.join(BASE_DIR, path_str)
 
 
 def load_inputs(ioi_source=IOI_PATH, trd_source=TRD_PATH):
@@ -597,6 +609,7 @@ def main():
             trd_file = st.file_uploader("Trades CSV", type=["csv"])
             if not ioi_file or not trd_file:
                 st.info("Please upload both IOI and trade CSV files to continue.")
+        st.caption("If using defaults, files are resolved relative to this app's directory.")
         report_name = st.text_input(
             "Report filename",
             value=DEFAULT_REPORT_NAME,
@@ -613,6 +626,12 @@ def main():
         df_raw, df = _cached_load(ioi_bytes, trd_bytes, use_sample)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Could not load data: {exc}")
+        if use_sample:
+            st.info(
+                "Tip: Ensure the sample CSVs exist at "
+                f"`{_resolve_path(IOI_PATH)}` and `{_resolve_path(TRD_PATH)}` "
+                "or switch off 'Use default sample CSVs' and upload files directly."
+            )
         st.stop()
 
     completeness = field_completeness(df)
